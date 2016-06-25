@@ -1,0 +1,31 @@
+#!/bin/bash
+
+set -e
+
+base=/var/lib/amavis
+conf=/etc/amavis/conf.d/50-user
+
+if [ "$1" = "supervisord" ]; then
+    # check for essential paths
+    test -d "$base"/db || mkdir "$base"/db
+    test -d "$base"/tmp || mkdir "$base"/tmp
+    test -d "$base"/virusmails || mkdir "$base"/virusmails
+
+    chown -R amavis.amavis "$base"
+
+    echo "Setting up configuration..."
+    hostname -f > /etc/mailname
+    sed -i "s/@SMTP_SERVER@/$SMTP_SERVER/" "$conf"
+    sed -i "s/@SA_TAG_LEVEL@/$SA_TAG_LEVEL/" "$conf"
+    sed -i "s/@SA_TAG2_LEVEL@/$SA_TAG2_LEVEL/" "$conf"
+    sed -i "s/@SA_KILL_LEVEL@/$SA_KILL_LEVEL/" "$conf"
+
+    echo "Running spamassassin update..."
+    /etc/cron.daily/spamassassin
+    echo "Running sa-sync ..."
+    start-stop-daemon --start --chuid amavis:amavis --exec /usr/sbin/amavisd-new-cronjob -- sa-sync
+    echo "Running sa-clean ..."
+    start-stop-daemon --start --chuid amavis:amavis --exec /usr/sbin/amavisd-new-cronjob -- sa-clean
+fi
+
+exec "$@"
